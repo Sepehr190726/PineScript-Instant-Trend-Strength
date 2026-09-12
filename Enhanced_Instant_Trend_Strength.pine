@@ -1,0 +1,136 @@
+//@version=6
+indicator("⚡ Enhanced Instant Trend Strength", shorttitle="EITS", overlay=false)
+
+// ====================================
+// Inputs
+// ====================================
+length = input.int(14, "Strength Length", minval=2)
+rangeLength = input.int(14, "Range Length", minval=2)
+atrLength = input.int(14, "ATR Length", minval=2)
+
+// Range Detection
+adxLength = input.int(14, "ADX Length", minval=2)
+adxThreshold = input.float(25, "ADX Threshold (Range if below)", minval=10, maxval=50)
+
+// Smoothing
+useSmoothing = input.bool(true, "Use Smoothing")
+smoothLength = input.int(5, "Smoothing Length", minval=2)
+
+// ====================================
+// 1. Directional Movement فعلی
+// ====================================
+priceChange = close - close[1]
+absPriceChange = math.abs(priceChange)
+
+avgMove = ta.sma(absPriceChange, length)
+
+// ====================================
+// 2. دامنه واقعی بازار
+// ====================================
+highestPrice = ta.highest(high, rangeLength)
+lowestPrice = ta.lowest(low, rangeLength)
+
+priceRange = highestPrice - lowestPrice
+
+// ====================================
+// 3. Efficiency (حرکت خالص / کل حرکت)
+// ====================================
+totalMovement = math.sum(absPriceChange, length)
+netMovement = math.abs(close - close[length])
+
+efficiency = totalMovement != 0 
+     ? netMovement / totalMovement 
+     : 0.0
+
+// ====================================
+// 4. ATR و دامنه نرمال شده
+// ====================================
+atrValue = ta.atr(atrLength)
+
+rangeExpansion = atrValue != 0
+     ? priceRange / atrValue
+     : 0.0
+
+// ====================================
+// 5. ADX برای تشخیص رنج vs ترند
+// ====================================
+[diPlus, diMinus, adx] = ta.dmi(adxLength)
+
+isRange = adx < adxThreshold  // رنج شناسایی شد
+isTrend = adx >= adxThreshold // ترند قوی شناسایی شد
+
+// ====================================
+// 6. قدرت لحظه‌ای - بهبود شده
+// ====================================
+
+// اگر رنج است: قدرت باید کم باشه
+// اگر ترند است: قدرت باید زیاد باشه
+
+rangeFactor = 
+     if isRange
+          0.2  // در رنج، فقط 20% قدرت
+     else if isTrend
+          math.min(rangeExpansion / 3.0, 1.0)  // در ترند، حداکثر قدرت
+     else
+          math.min(rangeExpansion / 3.0, 0.7)  // حالت واسط
+
+instantStrength = efficiency * 100.0 * rangeFactor
+
+// محدود کردن به 0 تا 100
+instantStrengthClamped = math.max(0.0, math.min(100.0, instantStrength))
+
+// Smoothing (اختیاری)
+instantStrengthFinal = useSmoothing 
+     ? ta.sma(instantStrengthClamped, smoothLength) 
+     : instantStrengthClamped
+
+// ====================================
+// 7. Direction
+// ====================================
+isBullish = close > close[length]
+isBearish = close < close[length]
+
+// ====================================
+// 8. رنگ‌گذاری
+// ====================================
+strengthColor =
+     isBullish
+          ? color.new(#19CC07, 0)    // سبز روشن برای صعود
+          : isBearish
+               ? color.new(#FF1907, 0)    // قرمز روشن برای نزول
+               : color.new(#190726, 50)   // خاکستری برای حالت neutral
+
+rangeColor = isRange ? color.new(#FFD700, 70) : na  // طلایی برای رنج
+
+// ====================================
+// 9. Plotting
+// ====================================
+
+// Main Line
+plot(
+     instantStrengthFinal,
+     title="Instant Trend Strength",
+     color=strengthColor,
+     linewidth=2
+)
+
+// Range Background (شناسایی رنج)
+bgcolor(rangeColor, title="Range Detection")
+
+// Zero Line
+hline(0, "Zero", color=#190726, linestyle=hline.style_solid, linewidth=1)
+hline(50, "Mid", color=#808080, linestyle=hline.style_dotted, linewidth=1)
+hline(100, "Max", color=#000000, linestyle=hline.style_dashed, linewidth=1)
+
+// ADX Display (برای کنترل)
+plot(adx, title="ADX", color=color.new(#0066FF, 60), linewidth=1)
+
+// ====================================
+// Alerts (اختیاری)
+// ====================================
+trendStart = isTrend and isTrend[1] == false
+rangeStart = isRange and isRange[1] == false
+
+alertcondition(trendStart and isBullish, title="🚀 BULLISH TREND START", message="ترند صعودی شروع شد!")
+alertcondition(trendStart and isBearish, title="🔻 BEARISH TREND START", message="ترند نزولی شروع شد!")
+alertcondition(rangeStart, title="📊 RANGE DETECTED", message="رنج کندلی شناسایی شد!")
