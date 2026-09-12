@@ -54,7 +54,7 @@ rangeExpansion = atrValue != 0
 // ====================================
 // 5. ADX برای تشخیص رنج vs ترند
 // ====================================
-[diPlus, diMinus, adx] = ta.dmi(adxLength)
+[diPlus, diMinus, adx] = ta.dmi(adxLength, adxLength)
 
 isRange = adx < adxThreshold
 isTrend = adx >= adxThreshold
