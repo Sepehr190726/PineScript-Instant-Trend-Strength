@@ -64,7 +64,7 @@ isTrend = adx >= adxThreshold
 // ====================================
 rangeFactor = 
      isRange
-          ? 0.2
+          ? 0.0
           : isTrend
                ? math.min(rangeExpansion / 3.0, 1.0)
                : math.min(rangeExpansion / 3.0, 0.7)
@@ -93,8 +93,6 @@ strengthColor =
                ? color.new(#FF1907, 0)
                : color.new(#190726, 50)
 
-rangeColor = isRange ? color.new(#FFD700, 70) : na
-
 // ====================================
 // 9. Plotting
 // ====================================
@@ -105,20 +103,18 @@ plot(
      linewidth=2
 )
 
-bgcolor(rangeColor, title="Range Detection")
-
 hline(0, "Zero", color=#190726, linestyle=hline.style_solid, linewidth=1)
 hline(50, "Mid", color=#808080, linestyle=hline.style_dotted, linewidth=1)
 hline(100, "Max", color=#000000, linestyle=hline.style_dashed, linewidth=1)
-
-plot(adx, title="ADX", color=color.new(#0066FF, 60), linewidth=1)
 
 // ====================================
 // Alerts
 // ====================================
 trendStart = isTrend and isTrend[1] == false
 rangeStart = isRange and isRange[1] == false
+reachedMax = instantStrengthFinal >= 95 and instantStrengthFinal[1] < 95
 
 alertcondition(trendStart and isBullish, title="🚀 BULLISH TREND START", message="ترند صعودی شروع شد!")
 alertcondition(trendStart and isBearish, title="🔻 BEARISH TREND START", message="ترند نزولی شروع شد!")
 alertcondition(rangeStart, title="📊 RANGE DETECTED", message="رنج کندلی شناسایی شد!")
+alertcondition(reachedMax, title="⚠️ TREND AT LIMIT", message="روند به سقف/کف رسید!")
