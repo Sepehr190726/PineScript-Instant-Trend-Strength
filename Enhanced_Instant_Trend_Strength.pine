@@ -1,60 +1,65 @@
 //@version=6
-indicator("⚡ Instant Trend Strength - Pure", shorttitle="ITS", overlay=false)
+indicator("⚡ Instant Trend Strength v2", shorttitle="ITS v2", overlay=false)
 
 // ====================================
 // Inputs
 // ====================================
 length = input.int(14, "Lookback Period", minval=2)
+rangeDetectionLength = input.int(20, "Range Detection Period", minval=5)
 smoothing = input.int(5, "Smoothing", minval=1)
 useSmoothing = input.bool(true, "Apply Smoothing")
 
 // ====================================
-// Core Calculation
+// 1. Efficiency Ratio - قدرت روند
 // ====================================
-
-// 1. Price Movement
 priceChange = close - close[length]
 absPriceChange = math.abs(priceChange)
-
-// 2. Total Movement (Sum of all movements in period)
 totalMovement = math.sum(math.abs(close - close[1]), length)
 
-// 3. Efficiency Ratio (Net Movement / Total Movement)
-// This tells us how directional the price is
 efficiency = totalMovement != 0 
      ? (absPriceChange / totalMovement) * 100
      : 0.0
 
-// 4. Volatility Adjustment (ATR based)
+// ====================================
+// 2. Range Detection - تشخیص رنج
+// ====================================
+// اگر قیمت در یک محدوده محدود حرکت کنه = رنج
+highestPrice = ta.highest(high, rangeDetectionLength)
+lowestPrice = ta.lowest(low, rangeDetectionLength)
+priceRange = highestPrice - lowestPrice
+
+// ATR برای نرمال کردن
 atr = ta.atr(length)
 avgAtr = ta.sma(atr, length)
 
-volatilityFactor = avgAtr != 0 
-     ? atr / avgAtr
+// اگر priceRange کوچیک باشه نسبت به ATR = رنج است
+rangeRatio = avgAtr != 0 
+     ? priceRange / (avgAtr * rangeDetectionLength)
      : 1.0
 
-// Scale volatility to boost signal in trending markets
-volatilityBoost = math.min(volatilityFactor, 1.5)
+// اگر rangeRatio < 1 = رنج قوی
+rangeStrength = 1.0 - math.min(rangeRatio, 1.0)
 
 // ====================================
-// Final Strength (0-100)
+// 3. ادغام قدرت روند و تشخیص رنج
 // ====================================
-trendStrength = efficiency * volatilityBoost
+// در رنج: لاین نزدیک صفر
+// در ترند: لاین بالا
+finalStrength = efficiency * (1.0 - rangeStrength)
 
 // Clamp to 0-100
-trendStrengthClamped = math.max(0.0, math.min(100.0, trendStrength))
+finalStrengthClamped = math.max(0.0, math.min(100.0, finalStrength))
 
 // Apply smoothing
-trendStrengthFinal = useSmoothing 
-     ? ta.sma(trendStrengthClamped, smoothing)
-     : trendStrengthClamped
+finalStrengthSmoothed = useSmoothing 
+     ? ta.sma(finalStrengthClamped, smoothing)
+     : finalStrengthClamped
 
 // ====================================
-// Direction Detection
+// Direction
 // ====================================
 isBullish = close > close[length]
 isBearish = close < close[length]
-isNeutral = close == close[length]
 
 // ====================================
 // Colors
@@ -70,7 +75,7 @@ lineColor =
 // Plotting
 // ====================================
 plot(
-     trendStrengthFinal,
+     finalStrengthSmoothed,
      title="Trend Strength",
      color=lineColor,
      linewidth=2
@@ -81,16 +86,16 @@ hline(0, "Zero", color=color.gray, linestyle=hline.style_solid, linewidth=1)
 hline(50, "Mid", color=color.gray, linestyle=hline.style_dotted, linewidth=1)
 hline(100, "Max", color=color.gray, linestyle=hline.style_dashed, linewidth=1)
 
-// Fill between 0 and line
-fill(plot(trendStrengthFinal), plot(0), color=lineColor, title="Strength Fill")
+// Background for range
+bgcolor(rangeStrength > 0.6 ? color.new(color.gray, 90) : na, title="Range Zone")
 
 // ====================================
 // Alerts
 // ====================================
-strongBullish = trendStrengthFinal >= 70 and isBullish
-strongBearish = trendStrengthFinal >= 70 and isBearish
-weakTrend = trendStrengthFinal < 30
+strongBullish = finalStrengthSmoothed >= 70 and isBullish
+strongBearish = finalStrengthSmoothed >= 70 and isBearish
+rangeDetected = rangeStrength > 0.6
 
 alertcondition(strongBullish, title="🟢 Strong Bullish Trend", message="Strong uptrend detected!")
 alertcondition(strongBearish, title="🔴 Strong Bearish Trend", message="Strong downtrend detected!")
-alertcondition(weakTrend, title="⚪ Weak / Range", message="Range detected - weak trend!")
+alertcondition(rangeDetected, title="📊 Range Detected", message="Range zone detected - trend strength near zero!")
