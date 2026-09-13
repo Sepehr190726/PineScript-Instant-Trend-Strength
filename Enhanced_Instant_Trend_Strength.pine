@@ -1,143 +1,96 @@
 //@version=6
-indicator("⚡ Enhanced Instant Trend Strength", shorttitle="EITS", overlay=false)
+indicator("⚡ Instant Trend Strength - Pure", shorttitle="ITS", overlay=false)
 
 // ====================================
 // Inputs
 // ====================================
-length = input.int(14, "Strength Length", minval=2)
-rangeLength = input.int(14, "Range Length", minval=2)
-atrLength = input.int(14, "ATR Length", minval=2)
-
-// Range Detection
-adxLength = input.int(14, "ADX Length", minval=2)
-adxThreshold = input.float(25, "ADX Threshold (Range if below)", minval=10, maxval=50)
-volatilityThreshold = input.float(1.5, "Volatility Threshold for Range", minval=0.5, maxval=3.0)
-
-// Smoothing
-useSmoothing = input.bool(true, "Use Smoothing")
-smoothLength = input.int(5, "Smoothing Length", minval=2)
+length = input.int(14, "Lookback Period", minval=2)
+smoothing = input.int(5, "Smoothing", minval=1)
+useSmoothing = input.bool(true, "Apply Smoothing")
 
 // ====================================
-// 1. Directional Movement فعلی
+// Core Calculation
 // ====================================
-priceChange = close - close[1]
+
+// 1. Price Movement
+priceChange = close - close[length]
 absPriceChange = math.abs(priceChange)
 
-avgMove = ta.sma(absPriceChange, length)
+// 2. Total Movement (Sum of all movements in period)
+totalMovement = math.sum(math.abs(close - close[1]), length)
 
-// ====================================
-// 2. دامنه واقعی بازار
-// ====================================
-highestPrice = ta.highest(high, rangeLength)
-lowestPrice = ta.lowest(low, rangeLength)
-
-priceRange = highestPrice - lowestPrice
-
-// ====================================
-// 3. Efficiency (حرکت خالص / کل حرکت)
-// ====================================
-totalMovement = math.sum(absPriceChange, length)
-netMovement = math.abs(close - close[length])
-
+// 3. Efficiency Ratio (Net Movement / Total Movement)
+// This tells us how directional the price is
 efficiency = totalMovement != 0 
-     ? netMovement / totalMovement 
+     ? (absPriceChange / totalMovement) * 100
      : 0.0
 
-// ====================================
-// 4. ATR و دامنه نرمال شده
-// ====================================
-atrValue = ta.atr(atrLength)
-avgAtr = ta.sma(atrValue, length)
+// 4. Volatility Adjustment (ATR based)
+atr = ta.atr(length)
+avgAtr = ta.sma(atr, length)
 
-rangeExpansion = atrValue != 0
-     ? priceRange / atrValue
-     : 0.0
+volatilityFactor = avgAtr != 0 
+     ? atr / avgAtr
+     : 1.0
 
-// ====================================
-// 5. ADX برای تشخیص رنج vs ترند
-// ====================================
-[diPlus, diMinus, adx] = ta.dmi(adxLength, adxLength)
+// Scale volatility to boost signal in trending markets
+volatilityBoost = math.min(volatilityFactor, 1.5)
 
 // ====================================
-// 6. Volatility Analysis (نوسان پذیری)
+// Final Strength (0-100)
 // ====================================
-currentVolatility = atrValue / avgAtr
-isLowVolatility = currentVolatility < volatilityThreshold
-isHighVolatility = currentVolatility >= volatilityThreshold
+trendStrength = efficiency * volatilityBoost
 
-// ====================================
-// 7. Range vs Trend Detection - بهبود شده
-// ====================================
-isRange = adx < adxThreshold and isLowVolatility
-isTrend = adx >= adxThreshold and isHighVolatility
-isTransition = not isRange and not isTrend
+// Clamp to 0-100
+trendStrengthClamped = math.max(0.0, math.min(100.0, trendStrength))
 
-// ====================================
-// 8. قدرت لحظه‌ای - فیلتر شده
-// ====================================
-// در رنج: قدرت خیلی کم
-// در ترند: قدرت تا 100
-rangeFactor = 
-     isRange
-          ? 0.15
-          : isTrend
-               ? math.min(rangeExpansion / 2.5, 1.0)
-               : math.min(rangeExpansion / 3.5, 0.55)
-
-// Efficiency با وزن بیشتر در ترند
-efficiencyBoost = isTrend ? 1.2 : 1.0
-
-instantStrength = (efficiency * efficiencyBoost) * 100.0 * rangeFactor
-
-instantStrengthClamped = math.max(0.0, math.min(100.0, instantStrength))
-
-// Smoothing (اختیاری)
-instantStrengthFinal = useSmoothing 
-     ? ta.sma(instantStrengthClamped, smoothLength) 
-     : instantStrengthClamped
+// Apply smoothing
+trendStrengthFinal = useSmoothing 
+     ? ta.sma(trendStrengthClamped, smoothing)
+     : trendStrengthClamped
 
 // ====================================
-// 9. Direction
+// Direction Detection
 // ====================================
 isBullish = close > close[length]
 isBearish = close < close[length]
+isNeutral = close == close[length]
 
 // ====================================
-// 10. رنگ‌گذاری بهبود یافته
+// Colors
 // ====================================
-strengthColor =
+lineColor = 
      isBullish
-          ? color.new(#19CC07, 0)
+          ? color.new(#00FF00, 0)
           : isBearish
-               ? color.new(#FF1907, 0)
+               ? color.new(#FF0000, 0)
                : color.new(#808080, 50)
 
 // ====================================
-// 11. Plotting
+// Plotting
 // ====================================
 plot(
-     instantStrengthFinal,
-     title="Instant Trend Strength",
-     color=strengthColor,
+     trendStrengthFinal,
+     title="Trend Strength",
+     color=lineColor,
      linewidth=2
 )
 
-hline(0, "Zero", color=#190726, linestyle=hline.style_solid, linewidth=1)
-hline(25, "Range Zone", color=#FFD700, linestyle=hline.style_dotted, linewidth=1)
-hline(50, "Mid", color=#808080, linestyle=hline.style_dotted, linewidth=1)
-hline(75, "Trend Zone", color=#0066FF, linestyle=hline.style_dotted, linewidth=1)
-hline(100, "Max", color=#000000, linestyle=hline.style_dashed, linewidth=1)
+// Reference Lines
+hline(0, "Zero", color=color.gray, linestyle=hline.style_solid, linewidth=1)
+hline(50, "Mid", color=color.gray, linestyle=hline.style_dotted, linewidth=1)
+hline(100, "Max", color=color.gray, linestyle=hline.style_dashed, linewidth=1)
+
+// Fill between 0 and line
+fill(plot(trendStrengthFinal), plot(0), color=lineColor, title="Strength Fill")
 
 // ====================================
 // Alerts
 // ====================================
-trendStart = isTrend and isTrend[1] == false
-rangeStart = isRange and isRange[1] == false
-trendStrengthPeak = instantStrengthFinal >= 90 and instantStrengthFinal[1] < 90
-trendWeakening = instantStrengthFinal < 50 and isTrend[1]
+strongBullish = trendStrengthFinal >= 70 and isBullish
+strongBearish = trendStrengthFinal >= 70 and isBearish
+weakTrend = trendStrengthFinal < 30
 
-alertcondition(trendStart and isBullish, title="🚀 BULLISH TREND CONFIRMED", message="ترند صعودی قوی تایید شد!")
-alertcondition(trendStart and isBearish, title="🔻 BEARISH TREND CONFIRMED", message="ترند نزولی قوی تایید شد!")
-alertcondition(rangeStart, title="📊 RANGE ZONE", message="رنج شناسایی شد!")
-alertcondition(trendStrengthPeak, title="⚠️ TREND AT PEAK", message="روند به اوج رسید - احتمال تغییر!")
-alertcondition(trendWeakening, title="💭 TREND WEAKENING", message="روند ضعیف شد!")
+alertcondition(strongBullish, title="🟢 Strong Bullish Trend", message="Strong uptrend detected!")
+alertcondition(strongBearish, title="🔴 Strong Bearish Trend", message="Strong downtrend detected!")
+alertcondition(weakTrend, title="⚪ Weak / Range", message="Range detected - weak trend!")
