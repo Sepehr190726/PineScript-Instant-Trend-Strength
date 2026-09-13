@@ -23,46 +23,38 @@ efficiency = totalMovement != 0
 // ====================================
 // 2. Range Detection - تشخیص رنج
 // ====================================
-// اگر قیمت در یک محدوده محدود حرکت کنه = رنج
 highestPrice = ta.highest(high, rangeDetectionLength)
 lowestPrice = ta.lowest(low, rangeDetectionLength)
 priceRange = highestPrice - lowestPrice
 
-// ATR برای نرمال کردن
 atr = ta.atr(length)
 avgAtr = ta.sma(atr, length)
 
-// اگر priceRange کوچیک باشه نسبت به ATR = رنج است
 rangeRatio = avgAtr != 0 
      ? priceRange / (avgAtr * rangeDetectionLength)
      : 1.0
 
-// اگر rangeRatio < 1 = رنج قوی
 rangeStrength = 1.0 - math.min(rangeRatio, 1.0)
 
 // ====================================
 // 3. ادغام قدرت روند و تشخیص رنج
 // ====================================
-// در رنج: لاین نزدیک صفر
-// در ترند: لاین بالا
 finalStrength = efficiency * (1.0 - rangeStrength)
 
-// Clamp to 0-100
 finalStrengthClamped = math.max(0.0, math.min(100.0, finalStrength))
 
-// Apply smoothing
 finalStrengthSmoothed = useSmoothing 
      ? ta.sma(finalStrengthClamped, smoothing)
      : finalStrengthClamped
 
 // ====================================
-// Direction
+// Direction - جهت روند
 // ====================================
 isBullish = close > close[length]
 isBearish = close < close[length]
 
 // ====================================
-// Colors
+// Colors - رنگ بر اساس جهت
 // ====================================
 lineColor = 
      isBullish
@@ -85,9 +77,6 @@ plot(
 hline(0, "Zero", color=color.gray, linestyle=hline.style_solid, linewidth=1)
 hline(50, "Mid", color=color.gray, linestyle=hline.style_dotted, linewidth=1)
 hline(100, "Max", color=color.gray, linestyle=hline.style_dashed, linewidth=1)
-
-// Background for range
-bgcolor(rangeStrength > 0.6 ? color.new(color.gray, 90) : na, title="Range Zone")
 
 // ====================================
 // Alerts
